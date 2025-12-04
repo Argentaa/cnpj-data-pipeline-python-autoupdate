@@ -545,7 +545,9 @@ class Processor:
         """Process very large files in chunks, loading directly to database."""
         logger.info("Processing large file in chunks with direct database loading...")
 
-        chunk_size = 1_000_000  # Smaller chunks
+        # [MODIFICADO] Usar o batch_size da configuração em vez de 1 milhão fixo
+        # Antes: chunk_size = 1_000_000
+        chunk_size = self.config.batch_size
         table_name = FILE_MAPPINGS[file_type]
 
         # We need database access here
