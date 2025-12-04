@@ -575,3 +575,31 @@ class PostgreSQLAdapter(DatabaseAdapter):
     def supports_upsert(self) -> bool:
         """PostgreSQL supports ON CONFLICT."""
         return True
+
+    def execute_schema(self, schema_path: str):
+        """
+        Executa um arquivo SQL para criar as tabelas se não existirem.
+        Essencial para rodar via Cron em ambiente desacoplado.
+        """
+        import os
+
+        if not os.path.exists(schema_path):
+            logger.warning(f"Schema file not found at: {schema_path}")
+            return
+
+        logger.info(f"Verificando schema do banco ({schema_path})...")
+
+        try:
+            with open(schema_path, "r", encoding="utf-8") as f:
+                sql_script = f.read()
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql_script)
+                    conn.commit()
+
+            logger.info("✅ Schema verificado com sucesso.")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao executar schema: {e}")
+            raise

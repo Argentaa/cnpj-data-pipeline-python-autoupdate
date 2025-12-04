@@ -78,6 +78,11 @@ def main():
         # Connect to database and setup
         logger.info(f"Connecting to {config.database_backend.value}...")
         db.connect()
+
+        # [NOVO] Auto-Migration
+        # Garante que as tabelas existam antes de tentar inserir dados
+        db.execute_schema("init-db/postgres.sql")
+
         db.ensure_tracking_table()
 
         logger.info("Starting CNPJ data processing")
