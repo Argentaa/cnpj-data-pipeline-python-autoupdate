@@ -21,6 +21,10 @@ COPY validate.py .
 # 2. Copiar scripts de inicialização do banco (Auto-Migration)
 COPY init-db/ ./init-db/
 
+# [NOVO] Copiar e dar permissão ao script de entrada
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Set environment variables
 ENV TEMP_DIR=/app/temp
 ENV DATABASE_BACKEND=postgresql
@@ -38,7 +42,6 @@ RUN touch /var/log/cron.log && \
     chmod 0644 /etc/cron.d/cnpj-cron && \
     crontab /etc/cron.d/cnpj-cron
 
-# 4. Comando de Inicialização (Truque para Variáveis de Ambiente)
-# O Cron por padrão não vê as variáveis do Docker (POSTGRES_HOST, etc).
-# O comando abaixo salva as variáveis em /etc/environment antes de iniciar o cron.
-CMD printenv > /etc/environment && cron -f
+# 4. Comando de Inicialização [MODIFICADO]
+# Substituímos o CMD complexo pelo nosso Entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]
