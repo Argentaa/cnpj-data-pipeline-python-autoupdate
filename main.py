@@ -138,68 +138,70 @@ def main():
         files_processed = 0
         total_rows = 0
 
-        try:
-            # Download and extract all files using the configured strategy
-            logger.info("Downloading and extracting files...")
-            download_start = time.time()
+        # [MODIFICADO] Processamento Iterativo (Arquivo por Arquivo)
+        # Evita o problema de "tudo ou nada" e economiza disco
+        for i, filename in enumerate(files_to_process, 1):
+            file_start = time.time()
+            logger.info(f"🔄 [{i}/{len(files_to_process)}] Starting cycle for: {filename}")
 
-            all_extracted_files = downloader.download_files_batch(
-                latest_dir, files_to_process
-            )
-
-            download_duration = time.time() - download_start
-            logger.info(
-                f"✅ Downloaded {len(files_to_process)} files in {download_duration:.1f}s"
-            )
-
-            # Get download statistics
-            download_stats = downloader.get_download_stats()
-            if download_stats:
-                logger.debug(f"Download stats: {download_stats}")
-
-            # Process each extracted CSV file
-            for csv_file in all_extracted_files:
-                file_start = time.time()
-
-                try:
-                    result = processor.process_file(csv_file)
-
-                    if result is None:
-                        # File was processed in chunks directly to DB
-                        continue
-
-                    df, table_name = result
-
-                    # Insert/upsert data using bulk_upsert method
-                    # The PostgreSQL adapter automatically handles upsert vs insert logic
-                    db.bulk_upsert(df, table_name)
-
-                    total_rows += len(df) if df is not None else 0
-
-                    # Calculate duration
-                    duration = time.time() - file_start
-                    logger.info(f"✅ Processed {csv_file.name} in {duration:.1f}s")
-
-                except Exception as e:
-                    logger.error(f"❌ Error processing {csv_file.name}: {e}")
-                    if config.debug:
-                        logger.exception("Full traceback:")
+            try:
+                # 1. Download e Extração (Individual)
+                # Baixa apenas este arquivo específico
+                extracted_files = downloader.download_and_extract(latest_dir, filename)
+                
+                if not extracted_files:
+                    logger.warning(f"⚠️ No CSV files extracted from {filename}")
                     continue
 
-            # Mark all files as processed (only after successful processing)
-            for filename in files_to_process:
+                # 2. Processamento e Carga
+                for csv_file in extracted_files:
+                    try:
+                        logger.info(f"  Processing CSV: {csv_file.name}")
+                        
+                        # Processa (Parse + Transform)
+                        result = processor.process_file(csv_file)
+
+                        if result is None:
+                            # Caso especial: Arquivos gigantes processados em chunks direto pro banco
+                            # O processador já fez a inserção
+                            pass
+                        else:
+                            # Caso padrão: DataFrame em memória
+                            df, table_name = result
+                            db.bulk_upsert(df, table_name)
+                            total_rows += len(df)
+
+                    except Exception as e:
+                        logger.error(f"❌ Error processing CSV {csv_file.name}: {e}")
+                        # Não re-lançamos a exceção aqui para tentar os outros CSVs do mesmo ZIP
+                        # mas marcamos erro para não salvar o checkpoint do ZIP pai se necessário
+                        raise e
+                    finally:
+                        # Limpeza Imediata do CSV descompactado para economizar espaço
+                        if csv_file.exists():
+                            csv_file.unlink()
+
+                # 3. Checkpoint (Marcação de Sucesso)
+                # Se chegou aqui, todos os CSVs do ZIP foram processados
                 db.mark_processed(latest_dir, filename)
                 files_processed += 1
+                
+                duration = time.time() - file_start
+                logger.info(f"✅ [{i}/{len(files_to_process)}] Completed {filename} in {duration:.1f}s")
 
-            # Cleanup all temporary files
-            downloader.cleanup()
-
-        except Exception as e:
-            logger.error(f"❌ Error in batch processing: {e}")
-            if config.debug:
-                logger.exception("Full traceback:")
-            # Still try to mark successfully processed files
-            # (this could be enhanced to track which files succeeded)
+            except Exception as e:
+                logger.error(f"❌ Failed to process {filename}: {e}")
+                if config.debug:
+                    logger.exception("Full traceback:")
+                # Continua para o próximo arquivo, não aborta o pipeline inteiro
+                continue
+            
+            finally:
+                # 4. Limpeza do ZIP original
+                # Garante que o arquivo baixado seja removido antes do próximo
+                zip_path = Path(config.temp_dir) / filename
+                if zip_path.exists() and not config.keep_downloaded_files:
+                    zip_path.unlink()
 
         # Summary
         total_duration = time.time() - total_start
