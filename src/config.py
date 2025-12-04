@@ -99,16 +99,18 @@ class Config:
     connect_timeout: int = field(
         default_factory=lambda: _get_int_env("CONNECT_TIMEOUT", "30")
     )
+    # [MODIFICADO] Aumentado para 1800s (30min) para evitar crash em conexões lentas
     read_timeout: int = field(
-        default_factory=lambda: _get_int_env("READ_TIMEOUT", "300")
+        default_factory=lambda: _get_int_env("READ_TIMEOUT", "1800")
     )
 
     # Memory optimization
     max_file_size_mb: int = field(
         default_factory=lambda: _get_int_env("MAX_FILE_SIZE_MB", "500")
     )
+    # [MODIFICADO] Reduzido para 8MB (8388608 bytes) para minimizar pegada de memória
     encoding_chunk_size: int = field(
-        default_factory=lambda: _get_int_env("ENCODING_CHUNK_SIZE", "52428800")
+        default_factory=lambda: _get_int_env("ENCODING_CHUNK_SIZE", "8388608")
     )
 
     # Performance options

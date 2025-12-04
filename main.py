@@ -11,6 +11,8 @@ Usage: python main.py
 import logging
 import sys
 import time
+# [ADICIONADO] Importação para controle manual de memória
+import gc
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -141,6 +143,10 @@ def main():
         # [MODIFICADO] Processamento Iterativo (Arquivo por Arquivo)
         # Evita o problema de "tudo ou nada" e economiza disco
         for i, filename in enumerate(files_to_process, 1):
+            # [ADICIONADO] Força coleta de lixo ANTES de iniciar um novo ciclo pesado
+            # Isso limpa buffers de rede e objetos órfãos do arquivo anterior
+            gc.collect()
+
             file_start = time.time()
             logger.info(f"🔄 [{i}/{len(files_to_process)}] Starting cycle for: {filename}")
 
@@ -202,6 +208,9 @@ def main():
                 zip_path = Path(config.temp_dir) / filename
                 if zip_path.exists() and not config.keep_downloaded_files:
                     zip_path.unlink()
+                
+                # [ADICIONADO] Coleta de lixo final para garantir liberação imediata ao SO
+                gc.collect()
 
         # Summary
         total_duration = time.time() - total_start
